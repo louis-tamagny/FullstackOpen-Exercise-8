@@ -22,11 +22,11 @@ const Authors = (props) => {
             <th>born</th>
             <th>books</th>
           </tr>
-          {result.data.allAuthors.map((a) => (
-            <tr key={a.name}>
-              <td>{a.name}</td>
-              <td>{a.born}</td>
-              <td>{a.bookCount}</td>
+          {result.data.allAuthors.map((author) => (
+            <tr key={author.name}>
+              <td>{author.name}</td>
+              <td>{author.born}</td>
+              <td>{author.bookCount}</td>
             </tr>
           ))}
         </tbody>
