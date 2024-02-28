@@ -32,7 +32,7 @@ const Authors = (props) => {
           ))}
         </tbody>
       </table>
-      <AuthorBorn />
+      <AuthorBorn authors={result.data.allAuthors} />
     </div>
   )
 }
