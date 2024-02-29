@@ -152,6 +152,23 @@ const resolvers = {
     addBook: async (root, args) => {
       const book = { ...args }
 
+      if (args.author.length < 4) {
+        throw new GraphQLError(
+          'author name must be at least 4 characters long',
+          {
+            extensions: { code: 'BAD_USER_INPUT', invalidArgs: args.author },
+          }
+        )
+      }
+      if (args.title.length < 5) {
+        throw new GraphQLError(
+          'book title must be at least 5 characters long',
+          {
+            extensions: { code: 'BAD_USER_INPUT', invalidArgs: args.title },
+          }
+        )
+      }
+
       const bookDuplicate = await Book.findOne({ title: book.title })
       if (bookDuplicate) {
         throw new GraphQLError('Book already exists', {
@@ -165,12 +182,7 @@ const resolvers = {
         await author.save()
       }
       const newBook = new Book({ ...book, author: author })
-
-      try {
-        await newBook.save()
-      } catch (error) {
-        console.log(error)
-      }
+      await newBook.save()
 
       return newBook
     },
