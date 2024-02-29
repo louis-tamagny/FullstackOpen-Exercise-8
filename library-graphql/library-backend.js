@@ -6,6 +6,9 @@ const mongoose = require('mongoose')
 require('dotenv').config()
 const Book = require('./models/book')
 const Author = require('./models/author')
+const User = require('./models/user')
+
+const jwt = require('jsonwebtoken')
 /*
 let authors = [
   {
@@ -86,6 +89,16 @@ let books = [
 ]
 */
 const typeDefs = `
+  type User {
+    username: String!
+    favoriteGenre: String!
+    id: ID!
+  }
+
+  type Token {
+    value: String!
+  }
+
   type Author {
     name: String!
     id: ID!
@@ -106,6 +119,7 @@ const typeDefs = `
     authorCount: Int!
     allBooks(author: String, genre: String): [Book!]!
     allAuthors: [Author!]
+    me: User
   }
 
   type Mutation {
@@ -115,6 +129,14 @@ const typeDefs = `
       genres: [String!]): Book!
     editAuthor(name: String!
       setBornTo: Int!): Author
+    createUser(
+      username: String!
+      favoriteGenre: String!
+    ): User
+    login(
+      username: String!
+      password: String!
+    ): Token
 
   }
 `
@@ -146,10 +168,19 @@ const resolvers = {
       const authors = await Author.find()
       return authors
     },
+    me: async (root, args, { currentUser }) => {
+      return currentUser
+    },
   },
 
   Mutation: {
-    addBook: async (root, args) => {
+    addBook: async (root, args, { currentUser }) => {
+      if (!currentUser) {
+        throw new GraphQLError('invalid access token', {
+          extensions: { code: 'INVALID_ACCESS_TOKEN' },
+        })
+      }
+
       const book = { ...args }
 
       if (args.author.length < 4) {
@@ -186,7 +217,12 @@ const resolvers = {
 
       return newBook
     },
-    editAuthor: async (root, args) => {
+    editAuthor: async (root, args, { currentUser }) => {
+      if (!currentUser) {
+        throw new GraphQLError('invalid access token', {
+          extensions: { code: 'INVALID_ACCESS_TOKEN' },
+        })
+      }
       const author = await Author.findOne({ name: args.name })
       if (author) {
         author.born = args.setBornTo
@@ -194,6 +230,35 @@ const resolvers = {
         return author
       }
       return null
+    },
+    createUser: async (root, args) => {
+      const newUser = new User({ ...args })
+      try {
+        await newUser.save()
+      } catch (error) {
+        console.log(error)
+        throw new GraphQLError(error.message, {
+          extensions: { code: 'BAD_USER_INPUT', invalidArgs: args.username },
+        })
+      }
+      return newUser
+    },
+    login: async (root, args) => {
+      const user = await User.findOne({ username: args.username })
+
+      if (!user || args.password !== 'password') {
+        throw new GraphQLError('wrong credentials', {
+          extensions: { code: 'BAD_USER_INPUT', invalidArgs: args },
+        })
+      }
+      const token = {
+        value: jwt.sign(
+          { username: user.username, id: user.id },
+          process.env.JWT_SECRET
+        ),
+      }
+
+      return token
     },
   },
 }
@@ -210,6 +275,15 @@ mongoose
 
 startStandaloneServer(server, {
   listen: { port: 4000 },
+
+  context: async ({ req, res }) => {
+    const auth = req ? req.headers.authorization : null
+    if (auth && auth.startsWith('Bearer ')) {
+      const decodedToken = jwt.verify(auth.substring(7), process.env.JWT_SECRET)
+      const currentUser = await User.findById(decodedToken.id)
+      return { currentUser }
+    }
+  },
 }).then(({ url }) => {
   console.log(`Server ready at ${url}`)
 })
