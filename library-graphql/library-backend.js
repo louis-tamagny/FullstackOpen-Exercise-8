@@ -2,7 +2,11 @@ const { ApolloServer } = require('@apollo/server')
 const { startStandaloneServer } = require('@apollo/server/standalone')
 const { v4: uuidv4 } = require('uuid')
 const { GraphQLError } = require('graphql')
-
+const mongoose = require('mongoose')
+require('dotenv').config()
+const Book = require('./models/book')
+const Author = require('./models/author')
+/*
 let authors = [
   {
     name: 'Robert Martin',
@@ -28,20 +32,6 @@ let authors = [
     id: 'afa5b6f3-344d-11e9-a414-719c6709cf3e',
   },
 ]
-
-/*
- * Suomi:
- * Saattaisi olla järkevämpää assosioida kirja ja sen tekijä tallettamalla kirjan yhteyteen tekijän nimen sijaan tekijän id
- * Yksinkertaisuuden vuoksi tallennamme kuitenkin kirjan yhteyteen tekijän nimen
- *
- * English:
- * It might make more sense to associate a book with its author by storing the author's id in the context of the book instead of the author's name
- * However, for simplicity, we will store the author's name in connection with the book
- *
- * Spanish:
- * Podría tener más sentido asociar un libro con su autor almacenando la id del autor en el contexto del libro en lugar del nombre del autor
- * Sin embargo, por simplicidad, almacenaremos el nombre del autor en conexión con el libro
- */
 
 let books = [
   {
@@ -94,11 +84,7 @@ let books = [
     genres: ['classic', 'revolution'],
   },
 ]
-
-/*
-  you can remove the placeholder query once your first one has been implemented 
 */
-
 const typeDefs = `
   type Author {
     name: String!
@@ -109,7 +95,7 @@ const typeDefs = `
 
   type Book {
     title: String!
-    author: String!
+    author: Author!
     published: Int
     genres: [String!]
     id: ID!
@@ -135,44 +121,64 @@ const typeDefs = `
 
 const resolvers = {
   Author: {
-    bookCount: (root) => {
-      return books.filter((b) => b.author === root.name).length
+    bookCount: async (root) => {
+      const books = await Book.find({ author: root._id })
+      return books.length
     },
   },
 
   Query: {
-    bookCount: () => books.length,
-    authorCount: () => authors.length,
-    allBooks: (root, args) => {
-      let response = args.author
-        ? books.filter((b) => b.author === args.author)
-        : books
-      response = args.genre
-        ? response.filter((b) => b.genres.includes(args.genre))
-        : response
-      return response
+    bookCount: async () => {
+      const books = await Book.find()
+      return books.length
     },
-    allAuthors: () => authors,
+    authorCount: async () => {
+      const authors = await Author.find()
+      return authors.length
+    },
+    allBooks: async (root, args) => {
+      let books = args.genre
+        ? await Book.find({ genres: args.genre }).populate('author')
+        : await Book.find().populate('author')
+      return books
+    },
+    allAuthors: async () => {
+      const authors = await Author.find()
+      return authors
+    },
   },
 
   Mutation: {
-    addBook: (root, args) => {
-      if (books.find((b) => b.title === args.title)) {
+    addBook: async (root, args) => {
+      const book = { ...args }
+
+      const bookDuplicate = await Book.findOne({ title: book.title })
+      if (bookDuplicate) {
         throw new GraphQLError('Book already exists', {
           extensions: { code: 'BAD_USER_INPUT', invalidArgs: args.title },
         })
       }
-      if (!authors.find((a) => a.name === args.author)) {
-        authors.push({ name: args.author, id: uuidv4() })
+
+      let author = await Author.findOne({ name: book.author })
+      if (!author) {
+        author = new Author({ name: book.author })
+        await author.save()
       }
-      const newBook = { ...args, id: uuidv4() }
-      books.push(newBook)
+      const newBook = new Book({ ...book, author: author })
+
+      try {
+        await newBook.save()
+      } catch (error) {
+        console.log(error)
+      }
+
       return newBook
     },
-    editAuthor: (root, args) => {
-      const author = authors.find((a) => a.name === args.name)
+    editAuthor: async (root, args) => {
+      const author = await Author.findOne({ name: args.name })
       if (author) {
         author.born = args.setBornTo
+        await author.save()
         return author
       }
       return null
@@ -184,6 +190,11 @@ const server = new ApolloServer({
   typeDefs,
   resolvers,
 })
+
+mongoose
+  .connect(process.env.MONGODB_URI)
+  .then(() => console.log('connected to mongoDB'))
+  .catch((error) => console.log(error))
 
 startStandaloneServer(server, {
   listen: { port: 4000 },
