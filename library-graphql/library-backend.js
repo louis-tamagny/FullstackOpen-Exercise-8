@@ -223,6 +223,7 @@ const resolvers = {
           extensions: { code: 'INVALID_ACCESS_TOKEN' },
         })
       }
+
       const author = await Author.findOne({ name: args.name })
       if (author) {
         author.born = args.setBornTo

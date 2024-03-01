@@ -1,5 +1,5 @@
 import { useMutation } from '@apollo/client'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { ALL_AUTHORS, UPDATE_AUTHOR } from '../queries'
 
 const AuthorBorn = ({ authors }) => {
@@ -10,12 +10,11 @@ const AuthorBorn = ({ authors }) => {
     refetchQueries: [{ query: ALL_AUTHORS }],
   })
 
-  const handleUpdateAuthor = (event) => {
+  const handleUpdateAuthor = async (event) => {
     event.preventDefault()
-
     updateAuthor({ variables: { name, born: Number(born) } })
 
-    setName('')
+    setName(document.getElementById('selectAuthor').value)
     setBorn('')
   }
 
@@ -24,7 +23,9 @@ const AuthorBorn = ({ authors }) => {
       <h3>Set birthyear</h3>
       <form onSubmit={handleUpdateAuthor}>
         name
-        <select onChange={({ target }) => setName(target.value)}>
+        <select
+          id="selectAuthor"
+          onChange={({ target }) => setName(target.value)}>
           {authors.map((author) => (
             <option key={author.name} value={author.name}>
               {author.name}
